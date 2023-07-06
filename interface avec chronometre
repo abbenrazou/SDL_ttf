@@ -1,0 +1,626 @@
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <SDL2/SDL_image.h>
+#include <time.h>
+#define FONT_SIZE 32
+
+// Dimensions de la fenêtre
+const int SCREEN_WIDTH = 800;
+const int SCREEN_HEIGHT = 600;
+
+// Dimensions du texte
+const int TEXT_WIDTH = 200;
+const int TEXT_HEIGHT = 50;
+
+// Couleurs
+const SDL_Color WHITE_COLOR = { 0, 255, 255 };
+const SDL_Color BLACK_COLOR = { 0, 0, 0 };
+
+
+///////////////////////////////////////////////////////////////////////////////////////
+const int WALL_WIDTH = 50;
+const int WALL_HEIGHT = 32;
+const int PLAYER_WIDTH = 50;
+const int PLAYER_HEIGHT = 50;
+const int MONSTER_WIDTH = 50;
+const int MONSTER_HEIGHT = 50;
+const int PLAYER_SPEED = 10;
+const int MONSTER_SPEED = 5;
+const int taille_mat=20;
+
+
+/*SDL_Window* window = NULL;
+SDL_Renderer* renderer = NULL;*/
+SDL_Texture* gPlayerTexture = NULL;
+SDL_Texture* gMonsterTexture = NULL;
+SDL_Texture* gMonster2Texture = NULL;
+SDL_Rect gPlayerRect;
+SDL_Rect gMonsterRect;
+SDL_Rect gMonster2Rect;
+SDL_Rect gWalls[20];
+bool gIsRunning = true;
+
+
+
+bool loadMedia(int **matrice,SDL_Renderer* renderer )
+{
+    SDL_Surface* playerSurface = IMG_Load("Pacman.png");
+    if (playerSurface == NULL)
+    {
+        printf("Erreur lors du chargement de l'image du joueur : %s\n", SDL_GetError());
+        return false;
+    }
+
+    gPlayerTexture = SDL_CreateTextureFromSurface(renderer, playerSurface);
+    if (gPlayerTexture == NULL)
+    {
+        printf("Erreur lors de la création de la texture du joueur : %s\n", SDL_GetError());
+        return false;
+    }
+
+    SDL_FreeSurface(playerSurface);
+
+    SDL_Surface* monsterSurface = IMG_Load("Monstre.png");
+    if (monsterSurface == NULL)
+    {
+        printf("Erreur lors du chargement de l'image du monstre : %s\n", SDL_GetError());
+        return false;
+    }
+
+    gMonsterTexture = SDL_CreateTextureFromSurface(renderer, monsterSurface);
+    if (gMonsterTexture == NULL)
+    {
+        printf("Erreur lors de la création de la texture du monstre : %s\n", SDL_GetError());
+        return false;
+    }
+
+    SDL_FreeSurface(monsterSurface);
+    SDL_Surface* monster2Surface = IMG_Load("Monstre2.png");
+    if (monster2Surface == NULL)
+    {
+        printf("Erreur lors du chargement de l'image du monstre : %s\n", SDL_GetError());
+        return false;
+    }
+
+    gMonster2Texture = SDL_CreateTextureFromSurface(renderer, monster2Surface);
+    if (gMonster2Texture == NULL)
+    {
+        printf("Erreur lors de la création de la texture du monstre : %s\n", SDL_GetError());
+        return false;
+    }
+
+    SDL_FreeSurface(monster2Surface);
+
+    // Positionner le rectangle du joueur
+    gPlayerRect.x = SCREEN_WIDTH / 2 - PLAYER_WIDTH / 2;
+    gPlayerRect.y = SCREEN_HEIGHT / 2 - PLAYER_HEIGHT / 2;
+    gPlayerRect.w = PLAYER_WIDTH;
+    gPlayerRect.h = PLAYER_HEIGHT;
+
+    // Positionner le rectangle du monstre
+    gMonsterRect.x = rand() % (SCREEN_WIDTH - MONSTER_WIDTH);
+    gMonsterRect.y = rand() % (SCREEN_HEIGHT - MONSTER_HEIGHT);
+    gMonsterRect.w = MONSTER_WIDTH;
+    gMonsterRect.h = MONSTER_HEIGHT;
+
+    // Positionner le rectangle du monstre2
+    gMonster2Rect.x = rand() % (SCREEN_WIDTH - MONSTER_WIDTH);
+    gMonster2Rect.y = rand() % (SCREEN_HEIGHT - MONSTER_HEIGHT);
+    gMonster2Rect.w = MONSTER_WIDTH;
+    gMonster2Rect.h = MONSTER_HEIGHT;
+    // Positionner les rectangles des murs
+    for (int i=0;i<20;i++){
+        for(int j=0;j<20;j++){
+            matrice[i][j]=0;
+        }
+    }
+    srand(time(NULL));
+    for (int i = 0; i < 10; i++)
+    {
+        int randx=rand() %19;
+        int randy=rand() %19;
+        matrice[randx][randy]=1;
+        gWalls[i].x = randx* ((SCREEN_WIDTH - WALL_WIDTH))/taille_mat;
+        gWalls[i].y = randy* ((SCREEN_HEIGHT - WALL_HEIGHT)/taille_mat);
+        gWalls[i].w = SCREEN_WIDTH/taille_mat;
+        gWalls[i].h = SCREEN_HEIGHT/taille_mat;
+    }
+    for (int i=0;i<20;i++){
+        for(int j=0;j<20;j++){
+            printf("%d  ",matrice[i][j]);
+        }
+        printf("\n");
+    }
+
+    return true;
+}
+
+void handleEvents(SDL_Event event)
+{
+    //SDL_Event event;
+
+    while (SDL_PollEvent(&event) != 0)
+    {
+        if (event.type == SDL_QUIT)
+        {
+            gIsRunning = false;
+        }
+        else if (event.type == SDL_KEYDOWN)
+        {
+            SDL_Rect newPlayerRect = gPlayerRect; // Nouveau rectangle pour les nouvelles coordonnées du joueur
+
+            switch (event.key.keysym.sym)
+            {
+                case SDLK_UP:
+                    newPlayerRect.y -= PLAYER_SPEED;
+                    break;
+                case SDLK_DOWN:
+                    newPlayerRect.y += PLAYER_SPEED;
+                    break;
+                case SDLK_LEFT:
+                    newPlayerRect.x -= PLAYER_SPEED;
+                    break;
+                case SDLK_RIGHT:
+                    newPlayerRect.x += PLAYER_SPEED;
+                    break;
+            }
+
+            // Vérifier les collisions du joueur avec les murs pour les nouvelles coordonnées
+            bool isCollision = false;
+            for (int i = 0; i < 20; i++)
+            {
+                if (SDL_HasIntersection(&newPlayerRect, &gWalls[i]))
+                {
+                    isCollision = true;
+                    break;
+                }
+            }
+
+            // Vérifier les collisions du joueur avec les bords de la fenêtre
+            if (newPlayerRect.x < 0 || newPlayerRect.x + PLAYER_WIDTH > SCREEN_WIDTH ||
+                newPlayerRect.y < 0 || newPlayerRect.y + PLAYER_HEIGHT > SCREEN_HEIGHT)
+            {
+                isCollision = true;
+            }
+
+            if (!isCollision)
+            {
+                // Mettre à jour la position du joueur seulement s'il n'y a pas de collision
+                gPlayerRect = newPlayerRect;
+            }
+        }
+    }
+}
+
+void updateGame()
+{
+    // Vérifier les collisions du joueur avec les murs
+    for (int i = 0; i < 20; i++)
+    {
+        if (SDL_HasIntersection(&gPlayerRect, &gWalls[i]))
+        {
+            // Le joueur a touché un mur, arrêter son mouvement
+            gPlayerRect.x -= PLAYER_SPEED;
+            gPlayerRect.y -= PLAYER_SPEED;
+        }
+    }
+
+    // Mouvement aléatoire du monstre
+    int moveDirection = rand() % 4;
+    SDL_Rect newMonsterRect = gMonsterRect; // Nouveau rectangle pour les nouvelles coordonnées du monstre
+
+    switch (moveDirection)
+    {
+        case 0: // Gauche
+            newMonsterRect.x -= MONSTER_SPEED;
+            break;
+        case 1: // Droite
+            newMonsterRect.x += MONSTER_SPEED;
+            break;
+        case 2: // Haut
+            newMonsterRect.y -= MONSTER_SPEED;
+            break;
+        case 3: // Bas
+            newMonsterRect.y += MONSTER_SPEED;
+            break;
+    }
+
+    // Mouvement aléatoire du monstre
+    int moveDirection2 = rand() % 4;
+    SDL_Rect newMonster2Rect = gMonster2Rect; // Nouveau rectangle pour les nouvelles coordonnées du monstre
+
+    switch (moveDirection2)
+    {
+        case 0: // Gauche
+            newMonster2Rect.x -= MONSTER_SPEED;
+            break;
+        case 1: // Droite
+            newMonster2Rect.x += MONSTER_SPEED;
+            break;
+        case 2: // Haut
+            newMonster2Rect.y -= MONSTER_SPEED;
+            break;
+        case 3: // Bas
+            newMonster2Rect.y += MONSTER_SPEED;
+            break;
+    }
+
+    // Vérifier les collisions du monstre avec les murs pour les nouvelles coordonnées
+    bool isCollision = false;
+    for (int i = 0; i < 10; i++)
+    {
+        if (SDL_HasIntersection(&newMonsterRect, &gWalls[i]))
+        {
+            isCollision = true;
+            break;
+        }
+    }
+
+    // Vérifier les collisions du monstre avec les bords de la fenêtre
+    if (newMonsterRect.x < 0 || newMonsterRect.x + MONSTER_WIDTH > SCREEN_WIDTH)
+    {
+        isCollision = true;
+    }
+    if (newMonsterRect.y < 0 || newMonsterRect.y + MONSTER_HEIGHT > SCREEN_HEIGHT)
+    {
+        isCollision = true;
+    }
+
+    if (!isCollision)
+    {
+        // Mettre à jour la position du monstre seulement s'il n'y a pas de collision
+        gMonsterRect = newMonsterRect;
+    }
+
+    // Vérifier si le monstre a attrapé le joueur
+    if (SDL_HasIntersection(&gMonsterRect, &gPlayerRect))
+    {
+        printf("Le monstre a attrapé le joueur ! Fin du jeu.\n");
+        gIsRunning = false;
+    }
+    // Vérifier les collisions du monstre avec les murs pour les nouvelles coordonnées
+    bool isCollision2 = false;
+    for (int i = 0; i < 10; i++)
+    {
+        if (SDL_HasIntersection(&newMonster2Rect, &gWalls[i]))
+        {
+            isCollision2 = true;
+            break;
+        }
+    }
+
+    // Vérifier les collisions du monstre2 avec les bords de la fenêtre
+    if (newMonster2Rect.x < 0 || newMonster2Rect.x + MONSTER_WIDTH > SCREEN_WIDTH)
+    {
+        isCollision2 = true;
+    }
+    if (newMonster2Rect.y < 0 || newMonster2Rect.y + MONSTER_HEIGHT > SCREEN_HEIGHT)
+    {
+        isCollision2 = true;
+    }
+
+    if (!isCollision2)
+    {
+        // Mettre à jour la position du monstre seulement s'il n'y a pas de collision
+        gMonster2Rect = newMonster2Rect;
+    }
+
+    // Vérifier si le monstre a attrapé le joueur
+    if (SDL_HasIntersection(&gMonster2Rect, &gPlayerRect))
+    {
+        printf("Le monstre a attrapé le joueur ! Fin du jeu.\n");
+        gIsRunning = false;
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
+
+SDL_Texture* loadTexture(SDL_Renderer* renderer, const char* filename) {
+    SDL_Surface* surface = IMG_Load(filename);
+    SDL_Texture* texture = NULL;
+    if (surface) {
+        texture = SDL_CreateTextureFromSurface(renderer, surface);
+        SDL_FreeSurface(surface);
+    }
+    return texture;
+}
+
+// Fonction pour charger une texture à partir d'un texte
+SDL_Texture* loadTextureFromText(SDL_Renderer* renderer, const char* text, TTF_Font* font, SDL_Color color)
+{
+    // Créer une surface à partir du texte
+    SDL_Surface* surface = TTF_RenderText_Solid(font, text, color);
+    if (surface == NULL)
+    {
+        printf("Erreur lors de la création de la surface : %s\n", TTF_GetError());
+        return NULL;
+    }
+
+    // Créer une texture à partir de la surface
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (texture == NULL)
+    {
+        printf("Erreur lors de la création de la texture : %s\n", SDL_GetError());
+        SDL_FreeSurface(surface);
+        return NULL;
+    }
+
+    SDL_FreeSurface(surface);
+    return texture;
+}
+
+int main(int argc, char* args[])
+{
+    // Initialiser SDL
+    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+    {
+        printf("Erreur lors de l'initialisation de SDL : %s\n", SDL_GetError());
+        return 1;
+    }
+
+    // Initialiser SDL TTF
+    if (TTF_Init() < 0)
+    {
+        printf("Erreur lors de l'initialisation de SDL TTF : %s\n", TTF_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    // Créer la fenêtre
+    SDL_Window* window = SDL_CreateWindow("Press Start", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                                          SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+    if (window == NULL)
+    {
+        printf("Erreur lors de la création de la fenêtre : %s\n", SDL_GetError());
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
+    // Créer le renderer
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if (renderer == NULL)
+    {
+        printf("Erreur lors de la création du renderer : %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
+    // Charger la police
+    TTF_Font* font = TTF_OpenFont("arial.ttf", 50);
+    if (font == NULL)
+    {
+        printf("Erreur lors du chargement de la police : %s\n", TTF_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
+    TTF_Font* font2 = TTF_OpenFont("arial.ttf", FONT_SIZE);
+    SDL_Color textColor = {255, 255, 255}; 
+
+    Uint32 startTime = SDL_GetTicks();
+
+    SDL_Texture* texture2 = loadTexture(renderer, "Fondpacman.jpg");
+    if (!texture2) {
+        printf("Erreur lors du chargement de l'image : %s\n", IMG_GetError());
+        return 1;
+    }
+
+    // Charger la texture du texte
+    SDL_Texture* texture = loadTextureFromText(renderer, "Press Start", font, WHITE_COLOR);
+    if (texture == NULL)
+    {
+        TTF_CloseFont(font);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+    
+     int** matrice = (int**)malloc(taille_mat * sizeof(int*));
+    if (matrice == NULL) {
+        printf("Erreur lors de l'allocation de la matrice.\n");
+        return 1;
+    }
+
+    for (int i = 0; i < taille_mat; i++) {
+        matrice[i] = (int*)malloc(taille_mat * sizeof(int));
+        if (matrice[i] == NULL) {
+            printf("Erreur lors de l'allocation de la ligne %d de la matrice.\n", i);
+            return 1;
+        }
+    }
+
+     if (!loadMedia(matrice,renderer))
+    {
+        return 1;
+    }
+
+    // Boucle principale
+    bool quit = false;
+    SDL_Event event;
+    while (!quit)
+    {
+        // Gérer les événements
+        while (SDL_PollEvent(&event) != 0)
+        {
+            if (event.type == SDL_QUIT)
+            {
+                quit = true;
+            }
+            else if (event.type == SDL_MOUSEBUTTONDOWN)
+            {
+                // Vérifier si le clic est sur le texte
+                int mouseX, mouseY;
+                SDL_GetMouseState(&mouseX, &mouseY);
+                SDL_Rect textRect = { (SCREEN_WIDTH - TEXT_WIDTH) / 2, (SCREEN_HEIGHT - TEXT_HEIGHT) / 2, TEXT_WIDTH, TEXT_HEIGHT };
+                if (mouseX >= textRect.x && mouseX <= textRect.x + textRect.w &&
+                    mouseY >= textRect.y && mouseY <= textRect.y + textRect.h)
+                {
+                    // Afficher la fenêtre noire
+                    //handleEvents(event);
+                    /*updateGame();
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0xFF);
+                    SDL_RenderClear(renderer);
+
+                    // Dessiner les murs
+                    SDL_SetRenderDrawColor(renderer, 0, 255, 255, 0xFF);
+                    for (int i = 0; i < 20; i++)
+                    {
+                       SDL_RenderFillRect(renderer, &gWalls[i]);
+                    }
+
+                    // Dessiner le joueur et le monstre
+                    SDL_RenderCopy(renderer, gPlayerTexture, NULL, &gPlayerRect);
+                    SDL_RenderCopy(renderer, gMonsterTexture, NULL, &gMonsterRect);
+                    SDL_RenderCopy(renderer, gMonster2Texture, NULL, &gMonster2Rect);
+
+                    SDL_RenderPresent(renderer);*/
+                    // Attendre la fermeture de la fenêtre
+                    while (gIsRunning)
+                     {
+                         handleEvents(event);
+                         updateGame();
+                         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0xFF);
+                         SDL_RenderClear(renderer);
+
+                         // Dessiner les murs
+                        SDL_SetRenderDrawColor(renderer, 0, 255, 255, 0xFF);
+                        for (int i = 0; i < 20; i++)
+                        {
+                           SDL_RenderFillRect(renderer, &gWalls[i]);
+                        }
+
+                        // Dessiner le joueur et le monstre
+                        SDL_RenderCopy(renderer, gPlayerTexture, NULL, &gPlayerRect);
+                        SDL_RenderCopy(renderer, gMonsterTexture, NULL, &gMonsterRect);
+                        SDL_RenderCopy(renderer, gMonster2Texture, NULL, &gMonster2Rect);
+
+
+
+
+
+
+
+                         // Calcul du temps écoulé
+                        Uint32 currentTime = SDL_GetTicks();
+                        Uint32 elapsedTime = currentTime - startTime;
+
+                        // Conversion en secondes
+                        Uint32 seconds = elapsedTime / 1000;
+
+                        // Conversion en minutes et secondes
+                        Uint32 minutes = seconds / 60;
+                        Uint32 remainingSeconds = seconds % 60;
+
+                        // Affichage du chronomètre
+                        char timerText[10];
+                        sprintf(timerText, "%02d:%02d", minutes, remainingSeconds);
+
+                        SDL_Surface* textSurface3 = TTF_RenderText_Solid(font2, timerText, textColor);
+                        SDL_Texture* textTexture3 = SDL_CreateTextureFromSurface(renderer, textSurface3);
+
+                       int textWidth = textSurface3->w;
+                       int textHeight = textSurface3->h;
+
+                       SDL_Rect textRect3;
+                       textRect3.x = (SCREEN_WIDTH - textWidth) / 2;
+                       textRect3.y = 0;
+                       textRect3.w = textWidth;
+                       textRect3.h = textHeight;
+
+                       SDL_RenderCopy(renderer, textTexture3, NULL, &textRect3);
+
+                       SDL_FreeSurface(textSurface3);
+                       SDL_DestroyTexture(textTexture3);
+
+                        
+                        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        SDL_RenderPresent(renderer);
+                    }
+                    //handleEvents(event);
+                    bool innerQuit = false;
+                    while (!innerQuit)
+                    {
+                        while (SDL_PollEvent(&event) != 0)
+                        {
+                            if (event.type == SDL_QUIT)
+                            {
+                                innerQuit = true;
+                                quit = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+        
+        // Effacer le renderer
+        //SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+        SDL_RenderCopy(renderer, texture2, NULL, NULL);
+        SDL_RenderPresent(renderer);
+
+        //SDL_RenderClear(renderer);
+
+        // Afficher le texte
+        SDL_Rect textRect = { (SCREEN_WIDTH - TEXT_WIDTH) / 2, (SCREEN_HEIGHT - TEXT_HEIGHT) / 2, TEXT_WIDTH, TEXT_HEIGHT };
+        SDL_RenderCopy(renderer, texture, NULL, &textRect);
+
+        // Mettre à jour l'affichage
+        SDL_RenderPresent(renderer);
+    }
+
+    // Libérer les ressources
+     for (int i = 0; i < taille_mat; i++) {
+        free(matrice[i]);
+    }
+    free(matrice);
+    SDL_DestroyTexture(texture);
+    SDL_DestroyTexture(gPlayerTexture);
+    SDL_DestroyTexture(gMonsterTexture);
+    SDL_DestroyTexture(gMonster2Texture);
+    TTF_CloseFont(font);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    IMG_Quit();
+    TTF_Quit();
+    SDL_Quit();
+
+    return 0;
+}
